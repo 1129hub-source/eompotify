@@ -210,7 +210,7 @@ function ScrollingTitle({ title }: { title: string }) {
       return
     }
     if (!moving) {
-      const timer = window.setTimeout(() => setMoving(true), 2000)
+      const timer = window.setTimeout(() => setMoving(true), 500)
       return () => window.clearTimeout(timer)
     }
     const text = textRef.current
