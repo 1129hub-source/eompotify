@@ -565,6 +565,11 @@ export function EompotifyApp() {
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           brandSubtitle={brandSubtitle}
+      <div className="flex flex-1 min-h-0 pb-36 sm:pb-28">
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          brandSubtitle={brandSubtitle}
           onSaveSubtitle={saveBrandSubtitle}
           playlists={playlists}
           activePlaylistId={activePlaylistId}
@@ -578,11 +583,6 @@ export function EompotifyApp() {
           onDeletePlaylist={(id) => {
             if (id !== LIKED_PLAYLIST_ID) setModal({ type: 'deletePlaylist', playlistId: id })
           }}
-          currentTrack={currentTrack}
-          defaultCover={defaultCover}
-          liked={isCurrentLiked}
-          onToggleLike={toggleLikeCurrentTrack}
-          onPickDefaultCover={handleDefaultCoverFile}
         />
 
         <main className="flex-1 min-w-0 flex flex-col">
@@ -603,16 +603,13 @@ export function EompotifyApp() {
           </header>
 
           <div className="w-full max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
-            {/* 모바일 전용: PC에서는 좌측 사이드바 하단에 표시됨 */}
-            <div className="lg:hidden">
-              <NowPlaying
-                currentTrack={currentTrack}
-                defaultCover={defaultCover}
-                liked={isCurrentLiked}
-                onToggleLike={toggleLikeCurrentTrack}
-                onPickDefaultCover={handleDefaultCoverFile}
-              />
-            </div>
+            <NowPlaying
+              currentTrack={currentTrack}
+              defaultCover={defaultCover}
+              liked={isCurrentLiked}
+              onToggleLike={toggleLikeCurrentTrack}
+              onPickDefaultCover={handleDefaultCoverFile}
+            />
 
             <section className="space-y-4">
               <div className="flex items-end justify-between gap-4 pb-4 border-b border-neutral-800/80">
@@ -682,18 +679,7 @@ export function EompotifyApp() {
         onCycleRepeat={cycleRepeatMode}
       />
 
-      <div aria-hidden="true" className="fixed bottom-0 right-0 w-32 h-[72px] -z-10 opacity-0 pointer-events-none overflow-hidden">
-        <div ref={yt.hostRef} className="yt-player-host w-full h-full" />
-      </div>
-
-      <ToastContainer toasts={toasts} />
-
-      {modal?.type === 'add' && <AddTrackModal onClose={() => setModal(null)} onSubmit={addTrack} showToast={showToast} />}
-      {modal?.type === 'newPlaylist' && <NewPlaylistModal onClose={() => setModal(null)} onSubmit={createPlaylist} />}
-      {modal?.type === 'editTrack' && editTrackTarget && (
-        <EditTrackModal
-          track={editTrackTarget}
-          onClose={() => setModal(null)}
+      {/* 백그라운드 유튜브 오디오 전용 플레이어 (UI에서 완전히 숨김, 재생 안정성 유지) */}
           onSubmit={(values) => saveEditedTrack(modal.playlistId, modal.trackId, values)}
           showToast={showToast}
         />
