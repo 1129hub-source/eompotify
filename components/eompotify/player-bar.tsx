@@ -216,13 +216,13 @@ function ScrollingTitle({ title }: { title: string }) {
     const text = textRef.current
     if (!text) return
     const duration = Math.max(900, distance / 32 * 1000)
-    // 일정 속도로 제목의 끝까지 이동한 뒤 1.5초간 유지하고 처음으로 돌아간다.
+    // 일정 속도로 제목의 끝까지 이동한 뒤 1초간 유지하고 처음으로 돌아간다.
     const animation = text.animate([
       { transform: 'translateX(0)' },
       { transform: `translateX(-${distance}px)` },
     ], { duration, easing: 'linear', fill: 'forwards' })
     let holdTimer: number | undefined
-    animation.onfinish = () => { holdTimer = window.setTimeout(() => setMoving(false), 1500) }
+    animation.onfinish = () => { holdTimer = window.setTimeout(() => setMoving(false), 1000) }
     return () => {
       animation.onfinish = null
       animation.cancel()
