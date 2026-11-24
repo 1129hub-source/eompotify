@@ -62,9 +62,9 @@ export function PlayerBar({
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-30 bg-[#181818]/95 backdrop-blur-xl border-t border-neutral-800/90 px-3 sm:px-6 py-2.5 sm:py-3">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-6">
-        {/* 좌측: 현재 재생 곡 정보 */}
-        <div className="hidden sm:flex items-center gap-3 min-w-0 flex-1 max-w-xs">
-          <div className="w-12 h-12 rounded-lg overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center">
+        {/* 좌측: 현재 재생 곡 앨범아트 + 제목/아티스트 */}
+        <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto sm:flex-1 sm:max-w-xs">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center">
             {cur ? (
               <FallbackImg
                 key={cur.trackId}
@@ -78,13 +78,13 @@ export function PlayerBar({
               <MusicNoteIcon className="w-5 h-5 text-neutral-600" />
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white truncate">{cur ? cur.title : '재생 중인 곡 없음'}</p>
             <p className="text-xs text-neutral-400 truncate mt-0.5">{cur ? cur.artist || '' : '곡을 클릭해 재생하세요'}</p>
           </div>
         </div>
 
-        {/* 중앙: 재생 컨트롤 + 시간/재생바 */}
+        {/* 중앙: 재생 컨트롤 버튼 + 재생 시간 및 구간 이동 바 */}
         <div className="w-full sm:flex-1 sm:max-w-xl flex flex-col items-center gap-1">
           <div className="flex items-center justify-center gap-2 sm:gap-3">
             <button
@@ -166,7 +166,7 @@ export function PlayerBar({
             </button>
           </div>
 
-          {/* 재생 시간 & 탐색 슬라이더 */}
+          {/* 재생 시간 & 구간 이동 슬라이더 */}
           <div className="w-full flex items-center gap-2.5 px-1">
             <span className="text-[11px] tabular-nums text-neutral-400 w-9 text-right shrink-0 select-none">
               {cur ? formatTime(displayTime) : '0:00'}
