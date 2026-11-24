@@ -1,28 +1,29 @@
 import type { ArtworkCandidate } from './types'
 import { ARTIST_ALIASES, normalizeText, stripBracketContent } from './utils'
 
-export async function fetchYouTubeOEmbed(videoId: string) {
-  const url = `https://www.youtube.com/watch?v=${videoId}`
-  const endpoints = [
-    `https://noembed.com/embed?url=${encodeURIComponent(url)}`,
-    `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
-  ]
-  for (const ep of endpoints) {
-    try {
-      const res = await fetch(ep)
-      if (!res.ok) continue
-      const data = await res.json()
-      if (data && data.title) {
-        return {
-          title: data.title as string,
-          author_name: (data.author_name as string) || '',
-        }
-      }
-    } catch {
-      // 다음 엔드포인트 시도
-    }
+// 모든 기기가 같은 출처의 Next.js API를 호출한다.
+async function requestMusicSearch(params: Record<string, string>) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 12000)
+  try {
+    const response = await fetch(`/api/music-search?${new URLSearchParams(params)}`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`Music search HTTP ${response.status}`)
+    return await response.json()
+  } finally {
+    clearTimeout(timer)
   }
-  return null
+}
+
+export async function fetchYouTubeOEmbed(videoId: string): Promise<{ title: string; author_name: string } | null> {
+  try {
+    const data = await requestMusicSearch({ kind: 'metadata', videoId })
+    return typeof data?.title === 'string' ? { title: data.title, author_name: data.author_name || '' } : null
+  } catch {
+    return null
+  }
 }
 
 type ItunesItem = {
@@ -32,77 +33,27 @@ type ItunesItem = {
   artistName?: string
 }
 
-/** JSONP 방식으로 iTunes Search API 호출 (미리보기 iframe CORS 차단 우회, song/album 모두 지원) */
-function searchItunesJsonp(query: string, limit = 8, country = '', entity = 'song'): Promise<ArtworkCandidate[]> {
-  return new Promise((resolve) => {
-    if (!query || !query.trim()) {
-      resolve([])
-      return
-    }
-    const w = window as unknown as Record<string, unknown>
-    const callbackName = `itunesCb_${Date.now()}_${Math.floor(Math.random() * 100000)}`
-    const script = document.createElement('script')
-    let settled = false
-
-    const cleanup = () => {
-      if (script.parentNode) script.parentNode.removeChild(script)
-      try {
-        delete w[callbackName]
-      } catch {
-        w[callbackName] = undefined
-      }
-    }
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true
-        cleanup()
-        resolve([])
-      }
-    }, 4500)
-
-    w[callbackName] = (json: { results?: ItunesItem[] }) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      cleanup()
-      const items = Array.isArray(json && json.results) ? json.results! : []
-      resolve(
-        items
-          .filter((item) => item.artworkUrl100)
-          .map((item) => ({
-            trackName: item.trackName || item.collectionName || '',
-            collectionName: item.collectionName || '',
-            artistName: item.artistName || '',
-            entity,
-            albumArt: item.artworkUrl100!.replace('100x100bb', '600x600bb'),
-          })),
-      )
-    }
-
-    const encoded = encodeURIComponent(query.trim())
-    const countryParam = country ? `&country=${country}` : ''
-    script.src = `https://itunes.apple.com/search?term=${encoded}&media=music&entity=${entity}&limit=${limit}${countryParam}&callback=${callbackName}`
-    script.onerror = () => {
-      if (!settled) {
-        settled = true
-        clearTimeout(timer)
-        cleanup()
-        resolve([])
-      }
-    }
-    document.head.appendChild(script)
-  })
+async function searchItunes(query: string, limit: number, country: string, entity: string): Promise<ArtworkCandidate[]> {
+  const data = await requestMusicSearch({ kind: 'artwork', q: query.trim().slice(0, 300), limit: String(limit), country, entity })
+  if (!Array.isArray(data?.results)) throw new Error('Invalid artwork response')
+  return (data.results as ItunesItem[])
+    .filter((item) => item.artworkUrl100)
+    .map((item) => ({
+      trackName: item.trackName || item.collectionName || '',
+      collectionName: item.collectionName || '',
+      artistName: item.artistName || '',
+      entity,
+      albumArt: item.artworkUrl100!.replace('100x100bb', '600x600bb'),
+    }))
 }
 
-/** iTunes Search API로 KR/글로벌 스토어 병렬 검색 후 병합 */
+/** KR/US 결과 중 한쪽 검색이 실패해도 성공한 결과는 사용한다. */
 async function searchItunesMultiStore(query: string, limit = 8, entity = 'song') {
   if (!query || !query.trim()) return []
-  const [krRes, usRes] = await Promise.all([
-    searchItunesJsonp(query, limit, 'KR', entity),
-    searchItunesJsonp(query, limit, 'US', entity),
-  ])
-  return [...krRes, ...usRes]
+  const results = await Promise.allSettled(['KR', 'US'].map((country) => searchItunes(query, limit, country, entity)))
+  const successful = results.filter((result): result is PromiseFulfilledResult<ArtworkCandidate[]> => result.status === 'fulfilled')
+  if (!successful.length) throw new Error('Artwork search unavailable')
+  return successful.flatMap((result) => result.value)
 }
 
 /** 아티스트 입력값에서 검색용 별칭 변형 목록 생성 */
@@ -207,8 +158,17 @@ export async function findArtworkCandidates(title: string, artist: string, limit
   if (primaryQueries.length === 0 && primaryArtist) primaryQueries.push(primaryArtist)
 
   const rawPool: ArtworkCandidate[] = []
-  const firstWave = await Promise.all(primaryQueries.slice(0, 3).map((q) => searchItunesMultiStore(q, 8, 'song')))
-  firstWave.forEach((list) => rawPool.push(...list))
+  let successfulSearches = 0
+  const collect = async (tasks: Promise<ArtworkCandidate[]>[]) => {
+    const results = await Promise.allSettled(tasks)
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        successfulSearches++
+        rawPool.push(...result.value)
+      }
+    }
+  }
+  await collect(primaryQueries.slice(0, 3).map((q) => searchItunesMultiStore(q, 8, 'song')))
 
   const topScoreSoFar = rawPool.reduce(
     (max, item) => Math.max(max, scoreArtworkCandidate(item, cleanTitle, artistVariants)),
@@ -222,10 +182,10 @@ export async function findArtworkCandidates(title: string, artist: string, limit
     } else if (primaryArtist) {
       fallbackTasks.push(searchItunesMultiStore(primaryArtist, 6, 'album'))
     }
-    const secondWave = await Promise.all(fallbackTasks)
-    secondWave.forEach((list) => rawPool.push(...list))
+    await collect(fallbackTasks)
   }
 
+  if (successfulSearches === 0 && primaryQueries.length > 0) throw new Error('Artwork search unavailable')
   if (rawPool.length === 0) return []
 
   const scored = rawPool.map((item) => ({

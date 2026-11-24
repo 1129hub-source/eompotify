@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { findArtworkCandidates } from '@/lib/eompotify/artwork'
 import type { ArtworkCandidate, Track } from '@/lib/eompotify/types'
 import { getFallbackCover } from '@/lib/eompotify/utils'
@@ -22,6 +22,18 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
   const [preview, setPreview] = useState(track.albumArt || getFallbackCover(track.title))
   const [candidates, setCandidates] = useState<ArtworkCandidate[]>([])
   const [searching, setSearching] = useState(false)
+  const [status, setStatus] = useState('')
+  const requestRef = useRef(0)
+  const searchingRef = useRef(false)
+  useEffect(() => () => { requestRef.current++ }, [])
+
+  const resetResults = () => {
+    requestRef.current++
+    searchingRef.current = false
+    setSearching(false)
+    setCandidates([])
+    setStatus('')
+  }
 
   const handleSearch = async () => {
     const t = title.trim()
@@ -30,13 +42,31 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
       showToast('노래 제목 또는 아티스트를 입력해 주세요.', 'error')
       return
     }
+    if (searchingRef.current) return
+    const id = ++requestRef.current
+    searchingRef.current = true
     setSearching(true)
+    setStatus('공식 앨범아트를 검색하는 중...')
     try {
       const found = await findArtworkCandidates(t, a, 5)
+      if (id !== requestRef.current) return
       setCandidates(found)
-      if (found.length === 0) showToast('일치하는 공식 앨범아트를 찾지 못했습니다.', 'error')
+      if (found.length > 0) {
+        setStatus(`공식 앨범아트 ${found.length}개를 찾았습니다.`)
+        if (!selectedArt || selectedArt.includes('i.ytimg.com')) {
+          setSelectedArt(found[0].albumArt)
+          setPreview(found[0].albumArt)
+        }
+      } else setStatus('일치하는 공식 앨범아트를 찾지 못했습니다.')
+    } catch (err) {
+      if (id !== requestRef.current) return
+      console.warn('앨범아트 검색 실패:', err)
+      setStatus('앨범아트 검색 서비스에 연결하지 못했습니다. 다시 검색해 주세요.')
     } finally {
-      setSearching(false)
+      if (id === requestRef.current) {
+        searchingRef.current = false
+        setSearching(false)
+      }
     }
   }
 
@@ -53,6 +83,7 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
         className="mt-4 space-y-4"
         onSubmit={(e) => {
           e.preventDefault()
+          if (searchingRef.current) return
           const t = title.trim()
           const a = artist.trim()
           if (!t || !a) return
@@ -75,10 +106,12 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
               className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60"
             >
               <SearchIcon className="w-3.5 h-3.5" />
-              <span>앨범아트 다시 검색</span>
+              <span>{searching ? '검색 중...' : '앨범아트 다시 검색'}</span>
             </button>
           </div>
         </div>
+
+        {status && <p className="text-[11px] text-neutral-400" aria-live="polite">{status}</p>}
 
         {candidates.length > 0 && (
           <div className="space-y-2">
@@ -103,8 +136,8 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
             type="text"
             required
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={inputClass}
+            onChange={(e) => { setTitle(e.target.value); resetResults() }}
+            className={inputClass.replace('text-sm', 'text-base sm:text-sm')}
           />
         </div>
 
@@ -117,8 +150,8 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
             type="text"
             required
             value={artist}
-            onChange={(e) => setArtist(e.target.value)}
-            className={inputClass}
+            onChange={(e) => { setArtist(e.target.value); resetResults() }}
+            className={inputClass.replace('text-sm', 'text-base sm:text-sm')}
           />
         </div>
 
@@ -132,7 +165,8 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
           </button>
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1DB954] hover:bg-[#1ed760] text-neutral-950 transition-colors"
+            disabled={searching}
+            className="disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1DB954] hover:bg-[#1ed760] text-neutral-950 transition-colors"
           >
             저장하기
           </button>

@@ -346,13 +346,19 @@ export function EompotifyApp() {
       }
       setLoaded(true)
 
-      const found = new Map<string, string>()
+      const found = new Map<string, { albumArt: string; title: string; artist: string; previousArt: string }>()
       for (const pl of initial) {
         for (const track of pl.tracks) {
           const needsLookup = !track.albumArt || track.albumArt.includes('i.ytimg.com') || track.needsArtworkLookup
           if (!needsLookup) continue
-          const results = await findArtworkCandidates(track.title, track.artist, 5)
-          if (results.length > 0 && results[0].albumArt) found.set(track.id, results[0].albumArt)
+          try {
+            const results = await findArtworkCandidates(track.title, track.artist, 5)
+            if (results.length > 0 && results[0].albumArt) {
+              found.set(track.id, { albumArt: results[0].albumArt, title: track.title, artist: track.artist, previousArt: track.albumArt })
+            }
+          } catch (err) {
+            console.warn('기존 곡 앨범아트 검색 실패:', err)
+          }
         }
       }
       if (found.size === 0) return
@@ -360,15 +366,18 @@ export function EompotifyApp() {
         prev.map((pl) => ({
           ...pl,
           tracks: pl.tracks.map((t) => {
-            const art = found.get(t.id)
-            if (!art) return t
+            const result = found.get(t.id)
+            if (!result || t.title !== result.title || t.artist !== result.artist || t.albumArt !== result.previousArt) return t
             const { needsArtworkLookup: _omit, ...rest } = t
-            return { ...rest, albumArt: art }
+            return { ...rest, albumArt: result.albumArt }
           }),
         })),
       )
       const cur = currentTrackRef.current
-      if (cur && found.has(cur.trackId)) commitCurrentTrack({ ...cur, albumArt: found.get(cur.trackId)! })
+      if (cur && found.has(cur.trackId)) {
+        const updated = playlistsRef.current.find((pl) => pl.id === cur.playlistId)?.tracks.find((t) => t.id === cur.trackId)
+        if (updated && updated.albumArt !== cur.albumArt) commitCurrentTrack({ ...cur, albumArt: updated.albumArt })
+      }
     })()
   }, [applySnapshot, commitActivePlaylistId, commitCurrentTrack, commitPlaylists, enqueueWrite])
 

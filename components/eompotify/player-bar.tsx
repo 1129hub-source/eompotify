@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CurrentTrack, RepeatMode } from '@/lib/eompotify/types'
 import { getFallbackCover, normalizeArtworkUrl } from '@/lib/eompotify/utils'
 import { FallbackImg } from './fallback-img'
@@ -72,7 +72,11 @@ export function PlayerBar({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-white truncate">{cur ? cur.title : '재생 중인 곡 없음'}</p>
+            {cur ? (
+              <ScrollingTitle key={`${seekKey}:${cur.title}`} title={cur.title} />
+            ) : (
+              <p className="text-sm font-semibold text-white truncate">재생 중인 곡 없음</p>
+            )}
             <p className="text-xs text-neutral-400 truncate mt-0.5">{cur ? cur.artist || '' : '곡을 클릭해 재생하세요'}</p>
           </div>
         </div>
@@ -166,6 +170,79 @@ export function PlayerBar({
         <div className="hidden lg:block" aria-hidden="true" />
       </div>
     </footer>
+  )
+}
+
+/** 잘린 곡 제목만 2초 후 슬라이딩. 다시 누르면 처음 위치에서 말줄임표로 복귀. */
+function ScrollingTitle({ title }: { title: string }) {
+  const viewportRef = useRef<HTMLButtonElement>(null)
+  const textRef = useRef<HTMLSpanElement>(null)
+  const [distance, setDistance] = useState(0)
+  const [stopped, setStopped] = useState(false)
+  const [moving, setMoving] = useState(false)
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    const text = textRef.current
+    if (!viewport || !text) return
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const overflow = text.scrollWidth - viewport.clientWidth
+      setDistance(overflow > 1 ? Math.ceil(overflow) : 0)
+    }
+    measure()
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    observer?.observe(viewport)
+    observer?.observe(text)
+    window.addEventListener('resize', measure)
+    document.fonts?.ready.then(measure).catch(() => {})
+    return () => {
+      active = false
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [title])
+
+  useEffect(() => {
+    if (stopped || distance === 0) {
+      setMoving(false)
+      return
+    }
+    if (!moving) {
+      const timer = window.setTimeout(() => setMoving(true), 2000)
+      return () => window.clearTimeout(timer)
+    }
+    const text = textRef.current
+    if (!text) return
+    const duration = Math.max(900, distance / 32 * 1000)
+    // 일정 속도로 제목의 끝까지 이동한 뒤 1.5초간 유지하고 처음으로 돌아간다.
+    const animation = text.animate([
+      { transform: 'translateX(0)' },
+      { transform: `translateX(-${distance}px)` },
+    ], { duration, easing: 'linear', fill: 'forwards' })
+    let holdTimer: number | undefined
+    animation.onfinish = () => { holdTimer = window.setTimeout(() => setMoving(false), 1500) }
+    return () => {
+      animation.onfinish = null
+      animation.cancel()
+      window.clearTimeout(holdTimer)
+    }
+  }, [distance, stopped, moving])
+
+  return (
+    <button
+      ref={viewportRef}
+      type="button"
+      title={title}
+      aria-label={distance > 0 ? `${title} — 제목 슬라이딩 ${stopped ? '다시 시작' : '정지'}` : title}
+      aria-pressed={distance > 0 ? !stopped : undefined}
+      disabled={distance === 0}
+      onClick={() => { setMoving(false); setStopped((previous) => !previous) }}
+      className={`block w-full min-w-0 overflow-hidden text-left text-sm font-semibold text-white ${distance > 0 ? 'cursor-pointer' : 'cursor-default'}`}
+    >
+      <span ref={textRef} className={moving && !stopped && distance > 0 ? 'block w-max whitespace-nowrap' : 'block truncate'}>{title}</span>
+    </button>
   )
 }
 

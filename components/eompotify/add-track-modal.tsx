@@ -22,12 +22,18 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
   const [status, setStatus] = useState<string | null>(null)
   const [selectedArt, setSelectedArt] = useState('')
   const [candidates, setCandidates] = useState<ArtworkCandidate[]>([])
-  const [isFetching, setIsFetching] = useState(false)
-
-  const isFetchingRef = useRef(false)
+  const [busy, setBusy] = useState<'metadata' | 'artwork' | null>(null)
+  const busyRef = useRef<'metadata' | 'artwork' | null>(null)
+  const requestRef = useRef(0)
+  const videoIdRef = useRef<string | null>(null)
   const lastFetchedVideoIdRef = useRef<string | null>(null)
-  const researchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const selectedArtRef = useRef('')
+
+  const updateBusy = (value: 'metadata' | 'artwork' | null) => {
+    busyRef.current = value
+    setBusy(value)
+  }
 
   const selectArt = (art: string) => {
     selectedArtRef.current = art
@@ -38,122 +44,155 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
     const t = setTimeout(() => urlInputRef.current?.focus(), 50)
     return () => {
       clearTimeout(t)
-      clearTimeout(researchTimerRef.current)
+      clearTimeout(timerRef.current)
+      requestRef.current++
     }
   }, [])
 
-  const fetchMetadata = async (force = false) => {
-    const videoId = extractYouTubeId(urlInputRef.current?.value ?? '')
-    if (!videoId) {
-      if (force) showToast('올바른 유튜브 링크를 입력해 주세요.', 'error')
-      return null
+  const showResults = (found: ArtworkCandidate[]) => {
+    setCandidates(found)
+    if (found.length > 0) {
+      const current = found.find((item) => item.albumArt === selectedArtRef.current)
+      selectArt((current || found[0]).albumArt)
+      setStatus(`공식 앨범아트 ${found.length}개를 찾았습니다. 아래에서 선택할 수 있습니다.`)
+    } else {
+      setStatus('일치하는 공식 앨범아트를 찾지 못했습니다. 제목·아티스트를 확인하고 다시 검색해 주세요.')
     }
-    if (!force && lastFetchedVideoIdRef.current === videoId) return null
-    if (isFetchingRef.current) return null
+  }
 
-    isFetchingRef.current = true
-    lastFetchedVideoIdRef.current = videoId
-    setIsFetching(true)
-    setStatus('곡 정보와 공식 앨범아트를 검색하는 중...')
-
+  const fetchMetadata = async (videoId: string, id: number) => {
+    if (id !== requestRef.current) return
+    updateBusy('metadata')
+    setStatus('곡 정보를 불러오는 중...')
     try {
       const oembed = await fetchYouTubeOEmbed(videoId)
-      let parsed = { title: '', artist: '', hasExplicitSplit: false }
-      if (oembed && oembed.title) {
-        parsed = parseYouTubeTitle(oembed.title, oembed.author_name)
+      if (id !== requestRef.current) return
+      if (!oembed?.title) {
+        setStatus('곡 정보를 자동으로 불러오지 못했습니다. 불러오기를 다시 누르거나 제목·아티스트를 직접 입력해 주세요.')
+        return
       }
-
+      const parsed = parseYouTubeTitle(oembed.title, oembed.author_name)
       let finalTitle = parsed.title
       let finalArtist = parsed.artist === 'Unknown Artist' ? '' : parsed.artist
+      // 커버 검색이 실패하더라도 먼저 가져온 제목과 아티스트는 표시한다.
+      setTitle(finalTitle)
+      setArtist(finalArtist)
+      lastFetchedVideoIdRef.current = videoId
+      setStatus('공식 앨범아트를 검색하는 중...')
       let found = await findArtworkCandidates(finalTitle, finalArtist, 5)
-
-      // 비공식 영상에 흔한 "노래제목 - 아티스트" 역순인 경우 교차 검증
-      if (parsed.hasExplicitSplit && finalTitle && finalArtist) {
-        const topScore = found[0]?.score ?? -99
-        if (topScore < 16) {
+      if (id !== requestRef.current) return
+      // 영상 제목의 아티스트/곡 순서가 반대일 때 기존 교차 검증 유지.
+      if (parsed.hasExplicitSplit && finalTitle && finalArtist && (found[0]?.score ?? -99) < 16) {
+        try {
           const swapped = await findArtworkCandidates(finalArtist, finalTitle, 5)
-          const swappedTopScore = swapped[0]?.score ?? -99
-          if (swappedTopScore > topScore + 2) {
-            const temp = finalTitle
-            finalTitle = finalArtist
-            finalArtist = temp
+          if (id !== requestRef.current) return
+          if ((swapped[0]?.score ?? -99) > (found[0]?.score ?? -99) + 2) {
+            ;[finalTitle, finalArtist] = [finalArtist, finalTitle]
             found = swapped
+            setTitle(finalTitle)
+            setArtist(finalArtist)
           }
+        } catch {
+          // 역순 검색만 실패하면 원래의 검색 결과를 유지한다.
         }
       }
-
-      if (finalTitle) setTitle(finalTitle)
-      if (finalArtist) setArtist(finalArtist)
-
-      if (found.length > 0) {
-        selectArt(found[0].albumArt)
-        setCandidates(found)
-        setStatus('곡 정보와 공식 앨범아트를 불러왔습니다.')
-      } else {
-        selectArt('')
-        setCandidates([])
-        setStatus('곡 정보를 불러왔습니다. 제목·아티스트를 다듬어 앨범아트를 다시 검색해 보세요.')
-      }
-      return { title: finalTitle, artist: finalArtist }
+      if (id !== requestRef.current) return
+      showResults(found)
     } catch (err) {
-      console.warn('메타데이터 조회 실패:', err)
-      setStatus('정보를 자동으로 불러오지 못했습니다. 직접 입력해 주세요.')
-      return null
+      if (id !== requestRef.current) return
+      console.warn('앨범아트 검색 실패:', err)
+      setStatus('앨범아트 검색 서비스에 연결하지 못했습니다. 앨범아트 다시 검색을 눌러 주세요.')
     } finally {
-      isFetchingRef.current = false
-      setIsFetching(false)
+      if (id === requestRef.current) updateBusy(null)
     }
   }
 
-  const researchArtwork = async (silent: boolean, t = title, a = artist) => {
-    const qTitle = t.trim()
-    const qArtist = a.trim()
-    if (!qTitle && !qArtist) {
-      if (!silent) showToast('노래 제목 또는 아티스트를 먼저 입력해 주세요.', 'error')
+  const changeUrl = (value: string) => {
+    setUrl(value)
+    const videoId = extractYouTubeId(value)
+    if (videoId === videoIdRef.current) return
+    clearTimeout(timerRef.current)
+    const id = ++requestRef.current
+    videoIdRef.current = videoId
+    lastFetchedVideoIdRef.current = null
+    setTitle('')
+    setArtist('')
+    selectArt('')
+    setCandidates([])
+    setStatus(null)
+    updateBusy(videoId ? 'metadata' : null)
+    if (videoId) {
+      setStatus('곡 정보를 불러오는 중...')
+      timerRef.current = setTimeout(() => void fetchMetadata(videoId, id), 350)
+    }
+  }
+
+  const loadNow = () => {
+    const videoId = extractYouTubeId(urlInputRef.current?.value || url)
+    if (!videoId) {
+      showToast('올바른 유튜브 링크를 입력해 주세요.', 'error')
       return
     }
-    if (!silent) setStatus('공식 앨범아트를 다시 검색하는 중...')
-    const found = await findArtworkCandidates(qTitle, qArtist, 5)
-    if (found.length > 0) {
-      selectArt(found[0].albumArt)
-      setCandidates(found)
-      if (!silent) setStatus(`공식 앨범아트 ${found.length}개를 찾았습니다.`)
-    } else if (!silent) {
-      setCandidates([])
-      setStatus('일치하는 공식 앨범아트를 찾지 못했습니다.')
+    clearTimeout(timerRef.current)
+    const id = ++requestRef.current
+    videoIdRef.current = videoId
+    void fetchMetadata(videoId, id)
+  }
+
+  const researchArtwork = async (t: string, a: string, id: number) => {
+    if (id !== requestRef.current) return
+    updateBusy('artwork')
+    setStatus('공식 앨범아트를 검색하는 중...')
+    try {
+      const found = await findArtworkCandidates(t.trim(), a.trim(), 5)
+      if (id !== requestRef.current) return
+      showResults(found)
+    } catch (err) {
+      if (id !== requestRef.current) return
+      console.warn('앨범아트 검색 실패:', err)
+      setStatus('앨범아트 검색 서비스에 연결하지 못했습니다. 다시 검색해 주세요.')
+    } finally {
+      if (id === requestRef.current) updateBusy(null)
     }
   }
 
-  const scheduleResearch = (t: string, a: string) => {
-    clearTimeout(researchTimerRef.current)
-    researchTimerRef.current = setTimeout(() => {
-      if (t.trim() || a.trim()) researchArtwork(true, t, a)
-    }, 650)
+  const scheduleResearch = (t: string, a: string, immediate = false) => {
+    clearTimeout(timerRef.current)
+    const id = ++requestRef.current
+    if (!immediate) {
+      selectArt('')
+      setCandidates([])
+    }
+    if (!t.trim() && !a.trim()) {
+      updateBusy(null)
+      setStatus(null)
+      if (immediate) showToast('노래 제목 또는 아티스트를 먼저 입력해 주세요.', 'error')
+      return
+    }
+    // 입력 후 검색 대기 시간에도 추가 버튼을 막아 검색 결과가 누락되지 않게 한다.
+    updateBusy('artwork')
+    setStatus('공식 앨범아트를 검색하는 중...')
+    if (immediate) void researchArtwork(t, a, id)
+    else timerRef.current = setTimeout(() => void researchArtwork(t, a, id), 650)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (busyRef.current) return
     const videoId = extractYouTubeId(url)
     if (!videoId) {
       showToast('유효한 유튜브 링크를 입력해 주세요.', 'error')
       urlInputRef.current?.focus()
       return
     }
-
-    let finalTitle = title
-    let finalArtist = artist
-    if (lastFetchedVideoIdRef.current !== videoId && !title.trim()) {
-      const fetched = await fetchMetadata(true)
-      if (fetched) {
-        finalTitle = fetched.title || finalTitle
-        finalArtist = fetched.artist || finalArtist
-      }
+    if (!title.trim() && lastFetchedVideoIdRef.current !== videoId) {
+      showToast('노래 제목을 입력하거나 불러오기를 눌러 주세요.', 'error')
+      return
     }
-
     onSubmit({
       videoId,
-      title: finalTitle.trim() || '제목 없음',
-      artist: finalArtist.trim() || 'Unknown Artist',
+      title: title.trim() || '제목 없음',
+      artist: artist.trim() || 'Unknown Artist',
       albumArt: selectedArtRef.current || '',
     })
   }
@@ -180,19 +219,17 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               placeholder="https://www.youtube.com/watch?v=..."
               required
               value={url}
-              onChange={(e) => {
-                setUrl(e.target.value)
-                if (extractYouTubeId(e.target.value)) fetchMetadata(false)
-              }}
-              onPaste={() => {
-                setTimeout(() => fetchMetadata(false), 60)
-              }}
-              className="flex-1 min-w-0 bg-[#121212] text-white placeholder-neutral-500 border border-neutral-700 focus:border-[#1DB954] focus:ring-2 focus:ring-[#1DB954]/20 rounded-xl px-3.5 py-2.5 text-sm outline-none transition-all"
+              onChange={(e) => changeUrl(e.target.value)}
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="flex-1 min-w-0 bg-[#121212] text-white placeholder-neutral-500 border border-neutral-700 focus:border-[#1DB954] focus:ring-2 focus:ring-[#1DB954]/20 rounded-xl px-3.5 py-2.5 text-base sm:text-sm outline-none transition-all"
             />
             <button
               type="button"
-              disabled={isFetching}
-              onClick={() => fetchMetadata(true)}
+              disabled={busy !== null}
+              onClick={loadNow}
               className="px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-[#1DB954] border border-neutral-700 shrink-0 transition-colors disabled:opacity-60"
             >
               불러오기
@@ -219,8 +256,9 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
             <p className="text-xs text-neutral-400 truncate mt-0.5">{artist.trim() || '아티스트'}</p>
             <button
               type="button"
-              onClick={() => researchArtwork(false)}
-              className="mt-2 text-[11px] font-semibold text-[#1DB954] hover:underline"
+              disabled={busy !== null}
+              onClick={() => scheduleResearch(title, artist, true)}
+              className="mt-2 text-[11px] font-semibold text-[#1DB954] hover:underline disabled:opacity-50"
             >
               앨범아트 다시 검색
             </button>
@@ -243,11 +281,12 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               id="add-title-input"
               type="text"
               value={title}
+              disabled={busy === 'metadata'}
               onChange={(e) => {
                 setTitle(e.target.value)
                 scheduleResearch(e.target.value, artist)
               }}
-              className={inputClass}
+              className={inputClass.replace('text-sm', 'text-base sm:text-sm')}
             />
           </div>
           <div>
@@ -258,11 +297,12 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               id="add-artist-input"
               type="text"
               value={artist}
+              disabled={busy === 'metadata'}
               onChange={(e) => {
                 setArtist(e.target.value)
                 scheduleResearch(title, e.target.value)
               }}
-              className={inputClass}
+              className={inputClass.replace('text-sm', 'text-base sm:text-sm')}
             />
           </div>
         </div>
@@ -277,9 +317,10 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
           </button>
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1DB954] hover:bg-[#1ed760] text-neutral-950 transition-colors"
+            disabled={busy !== null}
+            className="disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1DB954] hover:bg-[#1ed760] text-neutral-950 transition-colors"
           >
-            추가하기
+            {busy ? '검색 중...' : '추가하기'}
           </button>
         </div>
       </form>
