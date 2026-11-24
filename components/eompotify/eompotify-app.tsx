@@ -51,8 +51,8 @@ function ensureLikedPlaylist(list: Playlist[]): Playlist[] {
 }
 
 function firstNormalPlaylistId(list: Playlist[]) {
-  const firstNormal = list.find((p) => p.id !== LIKED_PLAYLIST_ID)
-  return firstNormal ? firstNormal.id : list[0]?.id ?? null
+  const liked = list.find((p) => p.id === LIKED_PLAYLIST_ID)
+  return liked ? liked.id : list[0]?.id ?? null
 }
 
 export function EompotifyApp() {
