@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { CurrentTrack, RepeatMode } from '@/lib/eompotify/types'
 import { getFallbackCover, normalizeArtworkUrl } from '@/lib/eompotify/utils'
 import { FallbackImg } from './fallback-img'
@@ -43,20 +43,15 @@ export function PlayerBar({
   onNext,
   onCycleRepeat,
 }: Props) {
-  const [draggingTime, setDraggingTime] = useState<number | null>(null)
 
   const isRepeatActive = repeatMode !== 'off'
   const repeatTitle = repeatMode === 'one' ? '한 곡 반복 재생' : repeatMode === 'all' ? '전체 반복 재생' : '반복 재생 꺼짐'
 
-  const effectiveTime = draggingTime !== null ? draggingTime : currentTime
-  const safeDuration = duration > 0 ? duration : 0
-  const progressPercent = safeDuration > 0 ? Math.min(100, Math.max(0, (effectiveTime / safeDuration) * 100)) : 0
-
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-30 bg-[#181818]/95 backdrop-blur-xl border-t border-neutral-800/90 px-3 sm:px-5 py-2.5 sm:py-3">
-      <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
+    <footer className="relative z-30 w-full shrink-0 bg-[#181818] border-t border-neutral-800/90 pt-[12px] pb-[max(4px,env(safe-area-inset-bottom))]">
+      <div className="w-full grid grid-cols-1 lg:grid-cols-[18rem_minmax(0,1fr)_18rem] items-center gap-y-2">
         {/* 좌측: 큰 화면에서도 항상 좌측 사이드바(w-72) 바로 아래에 고정 */}
-        <div className="flex items-center gap-3 min-w-0 w-full sm:w-64 lg:w-72 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 w-full px-5">
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center">
             {cur ? (
               <FallbackImg
@@ -78,20 +73,20 @@ export function PlayerBar({
         </div>
 
         {/* 중앙: 재생 컨트롤 버튼 + 시간 표기 및 구간 이동 재생바 */}
-        <div className="flex flex-col items-center gap-1.5 w-full max-w-xl flex-1">
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
+        <div className="flex flex-col items-center gap-[4px] w-full min-w-0 max-w-[730px] justify-self-center px-[12px] sm:px-[24px]">
+          <div className="flex items-center gap-[12px] sm:gap-[19px]">
             <button
               type="button"
               onClick={onToggleShuffle}
               aria-label="랜덤 재생"
               aria-pressed={isShuffle}
               title={isShuffle ? '랜덤 재생 켜짐' : '랜덤 재생 꺼짐'}
-              className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center hover:text-white hover:bg-neutral-800 transition-colors ${
-                isShuffle ? 'text-[#1DB954]' : 'text-neutral-400'
+              className={`relative w-[34px] h-[34px] flex items-center justify-center hover:text-white transition-colors ${
+                isShuffle ? 'text-[#1DB954]' : 'text-[#a7a7a7]'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+              <svg className="w-[19px] h-[19px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 3h4v4M3 20L21 3M17 21h4v-4M14 14l7 7M3 4l5 5" />
               </svg>
               {isShuffle && (
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#1DB954]" />
@@ -101,24 +96,24 @@ export function PlayerBar({
               type="button"
               onClick={onPrev}
               aria-label="이전 곡"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
+              className="w-[34px] h-[34px] flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
               </svg>
             </button>
             <button
               type="button"
               onClick={onPlayPause}
-              aria-label="재생 또는 일시정지"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-neutral-200 hover:scale-105 active:scale-95 text-neutral-950 flex items-center justify-center transition-all shadow-md"
+              aria-label={isPlaying ? "일시정지" : "재생"}
+              className="w-[45px] h-[45px] rounded-full bg-white hover:scale-105 active:scale-95 text-[#121212] flex items-center justify-center transition-transform"
             >
               {isPlaying ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="w-[18px] h-[18px] ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               )}
@@ -127,9 +122,9 @@ export function PlayerBar({
               type="button"
               onClick={onNext}
               aria-label="다음 곡"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
+              className="w-[34px] h-[34px] flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
             >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
               </svg>
             </button>
@@ -138,15 +133,15 @@ export function PlayerBar({
               onClick={onCycleRepeat}
               aria-label="반복 재생"
               title={repeatTitle}
-              className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center hover:text-white hover:bg-neutral-800 transition-colors ${
-                isRepeatActive ? 'text-[#1DB954]' : 'text-neutral-400'
+              className={`relative w-[34px] h-[34px] flex items-center justify-center hover:text-white transition-colors ${
+                isRepeatActive ? 'text-[#1DB954]' : 'text-[#a7a7a7]'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 1l4 4-4 4" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 11V9a4 4 0 014-4h14" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 23l-4-4 4-4" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 13v2a4 4 0 01-4 4H3" />
+              <svg className="w-[19px] h-[19px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 2l4 4-4 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 11V10a4 4 0 014-4h14" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 22l-4-4 4-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 13v1a4 4 0 01-4 4H3" />
               </svg>
               {repeatMode === 'one' && (
                 <span className="absolute top-0.5 right-0.5 text-[9px] font-extrabold leading-none px-1 py-0.5 rounded-full bg-[#1DB954] text-neutral-950">
@@ -159,63 +154,83 @@ export function PlayerBar({
             </button>
           </div>
 
-          {/* 재생 시간 표기 + 구간 이동 바 */}
-          <div className="w-full flex items-center gap-2.5 px-1">
-            <span className="text-[11px] font-medium tabular-nums text-neutral-400 w-9 text-right shrink-0">
-              {formatTime(effectiveTime)}
-            </span>
-
-            <div className="group/seek relative flex-1 h-4 flex items-center">
-              <div className="w-full h-1.5 rounded-full bg-neutral-700/80 overflow-hidden">
-                <div
-                  className="h-full bg-[#1DB954] group-hover/seek:bg-[#1ed760] transition-[background-color]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div
-                className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white shadow opacity-0 group-hover/seek:opacity-100 transition-opacity"
-                style={{ left: `${progressPercent}%` }}
-              />
-              <input
-                type="range"
-                aria-label="재생 구간 이동"
-                min={0}
-                max={safeDuration || 100}
-                step={0.1}
-                disabled={!cur || safeDuration <= 0}
-                value={safeDuration > 0 ? Math.min(safeDuration, effectiveTime) : 0}
-                onChange={(e) => {
-                  const val = Number(e.target.value)
-                  setDraggingTime(val)
-                }}
-                onMouseUp={(e) => {
-                  const val = Number((e.target as HTMLInputElement).value)
-                  setDraggingTime(null)
-                  onSeek(val)
-                }}
-                onTouchEnd={(e) => {
-                  const val = Number((e.target as HTMLInputElement).value)
-                  setDraggingTime(null)
-                  onSeek(val)
-                }}
-                onKeyUp={(e) => {
-                  const val = Number((e.target as HTMLInputElement).value)
-                  setDraggingTime(null)
-                  onSeek(val)
-                }}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default"
-              />
-            </div>
-
-            <span className="text-[11px] font-medium tabular-nums text-neutral-400 w-9 shrink-0">
-              {formatTime(safeDuration)}
-            </span>
-          </div>
+          <SeekBar
+            key={cur ? `${cur.playlistId}:${cur.trackId}` : 'empty'}
+            enabled={!!cur}
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={onSeek}
+          />
         </div>
 
         {/* 우측 균형 여백 (PC 중앙 컨트롤 정렬 유지) */}
-        <div className="hidden sm:block sm:w-64 lg:w-72 shrink-0" />
+        <div className="hidden lg:block" aria-hidden="true" />
       </div>
     </footer>
+  )
+}
+
+function SeekBar({ enabled, currentTime, duration, onSeek }: {
+  enabled: boolean
+  currentTime: number
+  duration: number
+  onSeek: (seconds: number) => void
+}) {
+  const [draft, setDraft] = useState<number | null>(null)
+  const pointerRef = useRef<number | null>(null)
+  const safeDuration = enabled && Number.isFinite(duration) && duration > 0 ? duration : 0
+  const clamp = (value: number) => Math.min(safeDuration, Math.max(0, Number.isFinite(value) ? value : 0))
+  const time = clamp(draft ?? currentTime)
+  const progress = safeDuration ? time / safeDuration * 100 : 0
+
+  function commit(input: HTMLInputElement) {
+    if (pointerRef.current === null) return
+    pointerRef.current = null
+    setDraft(null)
+    if (safeDuration > 0) onSeek(clamp(Number(input.value)))
+  }
+
+  return (
+    <div className="w-full flex items-center gap-[12px]">
+      <span className="text-[14px] leading-[20px] font-normal tabular-nums text-[#a7a7a7] w-[32px] text-right shrink-0">{formatTime(time)}</span>
+      <div className="group relative flex-1 min-w-0 h-[24px] flex items-center rounded-[3px] focus-within:outline-1 focus-within:outline-offset-2 focus-within:outline-white/70">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 h-[5px] rounded-[3px] bg-[#424242] overflow-hidden">
+          <div className="h-full rounded-[3px] bg-white" style={{ width: `${progress}%` }} />
+        </div>
+        <input
+          type="range"
+          aria-label="재생 구간 이동"
+          aria-valuetext={`${formatTime(time)} / ${formatTime(safeDuration)}`}
+          min={0}
+          max={safeDuration || 1}
+          step="any"
+          disabled={!safeDuration}
+          value={time}
+          onPointerDown={(e) => {
+            if (!e.isPrimary || e.button !== 0 || !safeDuration) return
+            pointerRef.current = e.pointerId
+            setDraft(time)
+            e.currentTarget.setPointerCapture(e.pointerId)
+          }}
+          onChange={(e) => {
+            const value = clamp(Number(e.currentTarget.value))
+            if (pointerRef.current !== null) setDraft(value)
+            else onSeek(value) // 키보드·보조기기 조작은 즉시 반영
+          }}
+          onPointerUp={(e) => { if (pointerRef.current === e.pointerId) commit(e.currentTarget) }}
+          onLostPointerCapture={(e) => { if (pointerRef.current === e.pointerId) commit(e.currentTarget) }}
+          onPointerCancel={() => { pointerRef.current = null; setDraft(null) }}
+          onBlur={(e) => commit(e.currentTarget)}
+          onKeyDown={(e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) || !safeDuration) return
+            e.preventDefault()
+            const delta = e.key === 'PageUp' ? safeDuration / 10 : e.key === 'PageDown' ? -safeDuration / 10 : ['ArrowLeft', 'ArrowDown'].includes(e.key) ? -5 : 5
+            onSeek(clamp(e.key === 'Home' ? 0 : e.key === 'End' ? safeDuration : time + delta))
+          }}
+          className="absolute inset-0 z-10 w-full h-full m-0 opacity-0 cursor-pointer touch-none disabled:cursor-default"
+        />
+      </div>
+      <span className="text-[14px] leading-[20px] font-normal tabular-nums text-[#a7a7a7] w-[32px] shrink-0">{formatTime(safeDuration)}</span>
+    </div>
   )
 }

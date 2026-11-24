@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { LIKED_PLAYLIST_ID } from '@/lib/eompotify/constants'
-import type { CurrentTrack, Playlist } from '@/lib/eompotify/types'
-import { getFallbackCover, normalizeArtworkUrl } from '@/lib/eompotify/utils'
+import type { Playlist } from '@/lib/eompotify/types'
+import { getFallbackCover } from '@/lib/eompotify/utils'
 import { FallbackImg } from './fallback-img'
 import {
   BrandLogo,
@@ -26,11 +26,6 @@ type Props = {
   onNewPlaylist: () => void
   onEditPlaylist: (id: string) => void
   onDeletePlaylist: (id: string) => void
-  currentTrack: CurrentTrack | null
-  defaultCover: string
-  liked: boolean
-  onToggleLike: () => void
-  onPickDefaultCover: (file: File) => void
 }
 
 export function Sidebar({
@@ -44,20 +39,10 @@ export function Sidebar({
   onNewPlaylist,
   onEditPlaylist,
   onDeletePlaylist,
-  currentTrack,
-  defaultCover,
-  liked,
-  onToggleLike,
-  onPickDefaultCover,
 }: Props) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const coverSrc = currentTrack
-    ? normalizeArtworkUrl(currentTrack.albumArt) || getFallbackCover(currentTrack.title)
-    : defaultCover
-
   return (
     <aside
-      className={`fixed lg:sticky top-0 left-0 z-40 h-screen lg:h-[calc(100vh-5.5rem)] w-72 bg-[#0a0a0a] border-r border-neutral-800/80 flex flex-col transform lg:translate-x-0 transition-transform duration-200 ease-out shrink-0 ${
+      className={`fixed lg:relative top-0 left-0 z-40 h-dvh lg:h-full min-h-0 w-72 bg-[#0a0a0a] border-r border-neutral-800/80 flex flex-col transform lg:translate-x-0 transition-transform duration-200 ease-out shrink-0 ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
@@ -97,7 +82,7 @@ export function Sidebar({
         </span>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1" aria-label="플레이리스트 목록">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 space-y-1" aria-label="플레이리스트 목록">
         {playlists.map((pl) => (
           <PlaylistItem
             key={pl.id}
@@ -110,90 +95,6 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* PC 화면 전용: 플레이리스트 목록 하단에 '재생 중인 곡' 고정 표시 */}
-      <div className="hidden lg:block p-3.5 border-t border-neutral-800/80 bg-[#0d0d0d]">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#1DB954] mb-2.5 px-0.5">NOW PLAYING</p>
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div
-              role={!currentTrack ? 'button' : undefined}
-              tabIndex={!currentTrack ? 0 : undefined}
-              title={!currentTrack ? '클릭하여 기본 앨범아트 사진 설정' : undefined}
-              onClick={() => {
-                if (!currentTrack) fileInputRef.current?.click()
-              }}
-              onKeyDown={(e) => {
-                if (!currentTrack && (e.key === 'Enter' || e.key === ' ')) {
-                  e.preventDefault()
-                  fileInputRef.current?.click()
-                }
-              }}
-              className={`group/cover relative w-14 h-14 aspect-square rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center transition-all ${
-                !currentTrack ? 'cursor-pointer hover:ring-1 hover:ring-[#1DB954]/60' : ''
-              }`}
-            >
-              {coverSrc ? (
-                <FallbackImg
-                  key={currentTrack ? currentTrack.trackId : coverSrc}
-                  src={coverSrc}
-                  fallbackSrc={currentTrack ? getFallbackCover(currentTrack.title) : ''}
-                  alt="지금 재생 중인 앨범아트"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full aspect-square object-cover"
-                />
-              ) : (
-                <MusicNoteIcon className="w-6 h-6 text-neutral-600 group-hover/cover:text-neutral-400 transition-colors" />
-              )}
-              {!currentTrack && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/cover:opacity-100 flex flex-col items-center justify-center gap-0.5 transition-opacity">
-                  <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="text-[9px] font-semibold text-white">기본 커버</span>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) onPickDefaultCover(file)
-                e.target.value = ''
-              }}
-            />
-
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-white truncate">
-                {currentTrack ? currentTrack.title : '재생 중인 곡 없음'}
-              </p>
-              <p className="text-xs text-neutral-400 truncate mt-0.5">
-                {currentTrack ? currentTrack.artist || '' : '곡을 선택해 재생하세요'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            aria-label="좋아요"
-            title={currentTrack ? (liked ? 'Liked songs에서 제거' : 'Liked songs에 추가') : 'Liked songs에 추가'}
-            disabled={!currentTrack}
-            onClick={onToggleLike}
-            className="p-2 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800/80 active:scale-90 transition-all shrink-0 disabled:opacity-35 disabled:pointer-events-none"
-          >
-            {liked && currentTrack ? (
-              <HeartFilledIcon className="w-5 h-5 text-rose-500" />
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </div>
     </aside>
   )
 }

@@ -133,6 +133,7 @@ export function EompotifyApp() {
     onPaused: () => setIsPlaying(false),
     onEnded: () => playNextTrack(true),
     onProgress: (cur, dur) => {
+      if (!currentTrackRef.current) return
       setCurrentTime(cur)
       setDuration(dur)
     },
@@ -187,8 +188,9 @@ export function EompotifyApp() {
   }
 
   function handleSeek(seconds: number) {
-    setCurrentTime(seconds)
-    yt.seekTo(seconds)
+    if (!currentTrackRef.current || !Number.isFinite(seconds) || duration <= 0) return
+    const target = Math.max(0, Math.min(seconds, duration))
+    if (yt.seekTo(target)) setCurrentTime(target)
   }
 
   function togglePlayPause() {
@@ -554,132 +556,141 @@ export function EompotifyApp() {
     <>
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs lg:hidden transition-opacity"
+          className="fixed inset-0 z-[35] bg-black/70 backdrop-blur-xs lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      <div className="flex flex-1 min-h-0 pb-28 sm:pb-24">
-        <Sidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          brandSubtitle={brandSubtitle}
-      <div className="flex flex-1 min-h-0 pb-36 sm:pb-28">
-        <Sidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          brandSubtitle={brandSubtitle}
-          onSaveSubtitle={saveBrandSubtitle}
-          playlists={playlists}
-          activePlaylistId={activePlaylistId}
-          onSelectPlaylist={(id) => {
-            commitActivePlaylistId(id)
-            setOpenTrackMenuId(null)
-            setSidebarOpen(false)
-          }}
-          onNewPlaylist={() => setModal({ type: 'newPlaylist' })}
-          onEditPlaylist={(id) => setModal({ type: 'editPlaylist', playlistId: id })}
-          onDeletePlaylist={(id) => {
-            if (id !== LIKED_PLAYLIST_ID) setModal({ type: 'deletePlaylist', playlistId: id })
-          }}
-        />
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+        <div className="flex flex-1 min-h-0">
+          <Sidebar
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            brandSubtitle={brandSubtitle}
+            onSaveSubtitle={saveBrandSubtitle}
+            playlists={playlists}
+            activePlaylistId={activePlaylistId}
+            onSelectPlaylist={(id) => {
+              commitActivePlaylistId(id)
+              setOpenTrackMenuId(null)
+              setSidebarOpen(false)
+            }}
+            onNewPlaylist={() => setModal({ type: 'newPlaylist' })}
+            onEditPlaylist={(id) => setModal({ type: 'editPlaylist', playlistId: id })}
+            onDeletePlaylist={(id) => {
+              if (id !== LIKED_PLAYLIST_ID) setModal({ type: 'deletePlaylist', playlistId: id })
+            }}
+          />
 
-        <main className="flex-1 min-w-0 flex flex-col">
-          <header className="sticky top-0 z-20 lg:hidden flex items-center justify-between px-4 py-3 bg-[#121212]/90 backdrop-blur-md border-b border-neutral-800/80">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="재생목록 메뉴 열기"
-              className="p-2 -ml-1 rounded-xl text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
-            >
-              <MenuIcon className="w-6 h-6" />
-            </button>
-            <div className="flex items-center gap-2">
-              <BrandLogo className="w-6 h-6 shrink-0" />
-              <span className="text-sm font-bold tracking-tight">EOMpotify</span>
-            </div>
-            <div className="w-9" />
-          </header>
+          <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto">
+            <header className="sticky top-0 z-20 lg:hidden flex items-center justify-between px-4 py-3 bg-[#121212]/90 backdrop-blur-md border-b border-neutral-800/80">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="재생목록 메뉴 열기"
+                className="p-2 -ml-1 rounded-xl text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
+              >
+                <MenuIcon className="w-6 h-6" />
+              </button>
+              <div className="flex items-center gap-2">
+                <BrandLogo className="w-6 h-6 shrink-0" />
+                <span className="text-sm font-bold tracking-tight">EOMpotify</span>
+              </div>
+              <div className="w-9" />
+            </header>
 
-          <div className="w-full max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
-            <NowPlaying
-              currentTrack={currentTrack}
-              defaultCover={defaultCover}
-              liked={isCurrentLiked}
-              onToggleLike={toggleLikeCurrentTrack}
-              onPickDefaultCover={handleDefaultCoverFile}
-            />
+            <div className="w-full max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-6">
+              <NowPlaying
+                currentTrack={currentTrack}
+                defaultCover={defaultCover}
+                liked={isCurrentLiked}
+                onToggleLike={toggleLikeCurrentTrack}
+                onPickDefaultCover={handleDefaultCoverFile}
+              />
 
-            <section className="space-y-4">
-              <div className="flex items-end justify-between gap-4 pb-4 border-b border-neutral-800/80">
-                <div className="flex items-center gap-4 min-w-0">
-                  {activePlaylist?.cover && (
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 shadow-lg">
-                      <FallbackImg
-                        key={activePlaylist.cover}
-                        src={activePlaylist.cover}
-                        fallbackSrc={getFallbackCover(activePlaylist.name)}
-                        alt="재생목록 커버"
-                        className="w-full h-full aspect-square object-cover"
-                      />
+              <section className="space-y-4">
+                <div className="flex items-end justify-between gap-4 pb-4 border-b border-neutral-800/80">
+                  <div className="flex items-center gap-4 min-w-0">
+                    {activePlaylist?.cover && (
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 shadow-lg">
+                        <FallbackImg
+                          key={activePlaylist.cover}
+                          src={activePlaylist.cover}
+                          fallbackSrc={getFallbackCover(activePlaylist.name)}
+                          alt="재생목록 커버"
+                          className="w-full h-full aspect-square object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[#1DB954]">PLAYLIST</span>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate mt-1">
+                        {activePlaylist ? activePlaylist.name : '재생목록'}
+                      </h2>
+                      <p className="text-sm text-neutral-400 mt-1">총 {activePlaylist ? activePlaylist.tracks.length : 0}곡</p>
                     </div>
-                  )}
-                  <div className="min-w-0">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[#1DB954]">PLAYLIST</span>
-                    <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate mt-1">
-                      {activePlaylist ? activePlaylist.name : '재생목록'}
-                    </h2>
-                    <p className="text-sm text-neutral-400 mt-1">총 {activePlaylist ? activePlaylist.tracks.length : 0}곡</p>
+                  </div>
+                  <div className="flex items-center shrink-0">
+                    <button
+                      type="button"
+                      title="곡 추가"
+                      aria-label="곡 추가"
+                      onClick={() => setModal({ type: 'add' })}
+                      className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ed760] hover:scale-105 active:scale-95 text-neutral-950 flex items-center justify-center transition-all shadow-md shadow-[#1DB954]/25"
+                    >
+                      <PlusIcon className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center shrink-0">
-                  <button
-                    type="button"
-                    title="곡 추가"
-                    aria-label="곡 추가"
-                    onClick={() => setModal({ type: 'add' })}
-                    className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ed760] hover:scale-105 active:scale-95 text-neutral-950 flex items-center justify-center transition-all shadow-md shadow-[#1DB954]/25"
-                  >
-                    <PlusIcon className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
 
-              {loaded && activePlaylist && (
-                <TrackList
-                  playlist={activePlaylist}
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  openTrackMenuId={openTrackMenuId}
-                  setOpenTrackMenuId={setOpenTrackMenuId}
-                  onPlay={(trackId) => playTrack(activePlaylist.id, trackId)}
-                  onEdit={(trackId) => setModal({ type: 'editTrack', playlistId: activePlaylist.id, trackId })}
-                  onDelete={(trackId) => deleteTrack(activePlaylist.id, trackId)}
-                  onReorder={(fromId, toId) => reorderTracks(activePlaylist.id, fromId, toId)}
-                />
-              )}
-            </section>
-          </div>
-        </main>
+                {loaded && activePlaylist && (
+                  <TrackList
+                    playlist={activePlaylist}
+                    currentTrack={currentTrack}
+                    isPlaying={isPlaying}
+                    openTrackMenuId={openTrackMenuId}
+                    setOpenTrackMenuId={setOpenTrackMenuId}
+                    onPlay={(trackId) => playTrack(activePlaylist.id, trackId)}
+                    onEdit={(trackId) => setModal({ type: 'editTrack', playlistId: activePlaylist.id, trackId })}
+                    onDelete={(trackId) => deleteTrack(activePlaylist.id, trackId)}
+                    onReorder={(fromId, toId) => reorderTracks(activePlaylist.id, fromId, toId)}
+                  />
+                )}
+              </section>
+            </div>
+          </main>
+        </div>
+
+        <PlayerBar
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          isShuffle={isShuffle}
+          repeatMode={repeatMode}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={handleSeek}
+          onToggleShuffle={toggleShuffle}
+          onPrev={playPrevTrack}
+          onPlayPause={togglePlayPause}
+          onNext={() => playNextTrack(false)}
+          onCycleRepeat={cycleRepeatMode}
+        />
       </div>
 
-      <PlayerBar
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        isShuffle={isShuffle}
-        repeatMode={repeatMode}
-        currentTime={currentTime}
-        duration={duration}
-        onSeek={handleSeek}
-        onToggleShuffle={toggleShuffle}
-        onPrev={playPrevTrack}
-        onPlayPause={togglePlayPause}
-        onNext={() => playNextTrack(false)}
-        onCycleRepeat={cycleRepeatMode}
-      />
-
-      {/* 백그라운드 유튜브 오디오 전용 플레이어 (UI에서 완전히 숨김, 재생 안정성 유지) */}
+      {/* 기존 오디오 플레이어의 iframe 연결 지점 */}
+      <div className="yt-player-host fixed left-0 bottom-0 w-[200px] h-[200px] opacity-0 pointer-events-none -z-10" aria-hidden="true" inert ref={yt.hostRef} />
+      <ToastContainer toasts={toasts} />
+      {modal?.type === 'add' && (
+        <AddTrackModal onClose={() => setModal(null)} onSubmit={addTrack} showToast={showToast} />
+      )}
+      {modal?.type === 'newPlaylist' && (
+        <NewPlaylistModal onClose={() => setModal(null)} onSubmit={createPlaylist} />
+      )}
+      {modal?.type === 'editTrack' && editTrackTarget && (
+        <EditTrackModal
+          track={editTrackTarget}
+          onClose={() => setModal(null)}
           onSubmit={(values) => saveEditedTrack(modal.playlistId, modal.trackId, values)}
           showToast={showToast}
         />

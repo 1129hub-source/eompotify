@@ -25,33 +25,51 @@ export function useYouTubePlayer(handlers: Handlers) {
   const playerRef = useRef<any>(null)
   const apiReadyRef = useRef(false)
   const pendingVideoIdRef = useRef<string | null>(null)
+  const activeVideoIdRef = useRef<string | null>(null)
+  const playerReadyRef = useRef(false)
+  const progressEnabledRef = useRef(false)
+  const pendingSeekRef = useRef<{ time: number; until: number } | null>(null)
   const handlersRef = useRef(handlers)
 
   useEffect(() => {
     handlersRef.current = handlers
   })
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const player = playerRef.current
-      if (!player || typeof player.getCurrentTime !== 'function' || typeof player.getDuration !== 'function') return
-      const cur = Number(player.getCurrentTime()) || 0
-      const dur = Number(player.getDuration()) || 0
-      if (dur > 0) {
-        handlersRef.current.onProgress?.(cur, dur)
-      }
-    }, 250)
-
-    return () => clearInterval(interval)
+  const reportProgress = useCallback(() => {
+    const player = playerRef.current
+    if (!playerReadyRef.current || !progressEnabledRef.current || !activeVideoIdRef.current || !player) return
+    if (typeof player.getCurrentTime !== 'function' || typeof player.getDuration !== 'function') return
+    const videoId = player.getVideoData?.()?.video_id
+    if (videoId && videoId !== activeVideoIdRef.current) return
+    const cur = Number(player.getCurrentTime())
+    const dur = Number(player.getDuration())
+    if (!Number.isFinite(cur) || !Number.isFinite(dur) || dur <= 0) return
+    // YouTube의 비동기 seek 응답 전에는 이전 위치로 UI가 튀지 않도록 한다.
+    const pending = pendingSeekRef.current
+    if (pending && Date.now() < pending.until && Math.abs(cur - pending.time) > 2) return
+    pendingSeekRef.current = null
+    handlersRef.current.onProgress?.(Math.max(0, Math.min(cur, dur)), dur)
   }, [])
 
+  useEffect(() => {
+    const interval = setInterval(reportProgress, 250)
+    return () => clearInterval(interval)
+  }, [reportProgress])
+
   const load = useCallback((videoId: string) => {
+    activeVideoIdRef.current = videoId
+    progressEnabledRef.current = false
+    pendingSeekRef.current = null
     const YT = window.YT
     if (!apiReadyRef.current || !YT || !YT.Player || !hostRef.current) {
       pendingVideoIdRef.current = videoId
       return
     }
 
+    if (playerRef.current && !playerReadyRef.current) {
+      pendingVideoIdRef.current = videoId
+      return
+    }
     if (!playerRef.current) {
       const playerVars: Record<string, unknown> = {
         autoplay: 1,
@@ -73,21 +91,34 @@ export function useYouTubePlayer(handlers: Handlers) {
         playerVars,
         events: {
           onReady: (e: any) => {
-            e.target.playVideo()
+            playerReadyRef.current = true
+            const pending = pendingVideoIdRef.current
+            pendingVideoIdRef.current = null
+            if (!activeVideoIdRef.current) e.target.stopVideo()
+            else if (pending) e.target.loadVideoById(pending)
+            else e.target.playVideo()
           },
           onStateChange: (e: any) => {
+            if (!activeVideoIdRef.current) return
+            const reportedId = e.target.getVideoData?.()?.video_id
+            if (reportedId && reportedId !== activeVideoIdRef.current) return
             if (e.data === YT.PlayerState.PLAYING) {
+              progressEnabledRef.current = true
               handlersRef.current.onPlaying()
-              const dur = Number(e.target.getDuration?.()) || 0
-              const cur = Number(e.target.getCurrentTime?.()) || 0
-              if (dur > 0) handlersRef.current.onProgress?.(cur, dur)
+              reportProgress()
             } else if (e.data === YT.PlayerState.PAUSED) {
+              progressEnabledRef.current = true
               handlersRef.current.onPaused()
-            } else if (e.data === YT.PlayerState.ENDED) {
+              reportProgress()
+            } else if (e.data === YT.PlayerState.ENDED && progressEnabledRef.current) {
+              reportProgress()
               handlersRef.current.onEnded()
             }
           },
           onError: (e: any) => {
+            if (!activeVideoIdRef.current) return
+            progressEnabledRef.current = false
+            pendingSeekRef.current = null
             handlersRef.current.onError(e?.data)
           },
         },
@@ -95,7 +126,7 @@ export function useYouTubePlayer(handlers: Handlers) {
     } else if (typeof playerRef.current.loadVideoById === 'function') {
       playerRef.current.loadVideoById(videoId)
     }
-  }, [])
+  }, [reportProgress])
 
   useEffect(() => {
     const markReady = () => {
@@ -127,7 +158,7 @@ export function useYouTubePlayer(handlers: Handlers) {
 
   const toggle = useCallback(() => {
     const player = playerRef.current
-    if (!player || typeof player.getPlayerState !== 'function') return false
+    if (!playerReadyRef.current || !player || typeof player.getPlayerState !== 'function') return false
     if (player.getPlayerState() === window.YT.PlayerState.PLAYING) player.pauseVideo()
     else player.playVideo()
     return true
@@ -135,16 +166,23 @@ export function useYouTubePlayer(handlers: Handlers) {
 
   const seekTo = useCallback((seconds: number) => {
     const player = playerRef.current
-    if (player && typeof player.seekTo === 'function') {
-      player.seekTo(seconds, true)
+    if (!playerReadyRef.current || !progressEnabledRef.current || !activeVideoIdRef.current || !player || typeof player.seekTo !== 'function' || !Number.isFinite(seconds)) return false
+    const duration = Number(player.getDuration?.())
+    if (!Number.isFinite(duration) || duration <= 0) return false
+    const time = Math.max(0, Math.min(seconds, duration))
+    try {
+      player.seekTo(time, true)
+      pendingSeekRef.current = { time, until: Date.now() + 1500 }
       return true
+    } catch {
+      return false
     }
-    return false
   }, [])
 
   const restart = useCallback(() => {
     const player = playerRef.current
-    if (player && typeof player.seekTo === 'function') {
+    if (playerReadyRef.current && player && typeof player.seekTo === 'function') {
+      pendingSeekRef.current = { time: 0, until: Date.now() + 1500 }
       player.seekTo(0, true)
       player.playVideo()
       return true
@@ -154,7 +192,11 @@ export function useYouTubePlayer(handlers: Handlers) {
 
   const stop = useCallback(() => {
     const player = playerRef.current
-    if (player && typeof player.stopVideo === 'function') player.stopVideo()
+    activeVideoIdRef.current = null
+    pendingVideoIdRef.current = null
+    pendingSeekRef.current = null
+    progressEnabledRef.current = false
+    if (playerReadyRef.current && player && typeof player.stopVideo === 'function') player.stopVideo()
   }, [])
 
   return { hostRef, load, toggle, seekTo, restart, stop }
