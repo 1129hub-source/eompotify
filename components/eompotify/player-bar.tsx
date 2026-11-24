@@ -51,13 +51,13 @@ export function PlayerBar({
   const seekKey = cur ? `${cur.playlistId}:${cur.trackId}` : 'empty'
 
   return (
-    <footer className="relative z-30 w-full shrink-0 bg-[#171717] border-t border-neutral-800/90 pt-3 pb-[max(4px,env(safe-area-inset-bottom))] lg:pt-2 lg:pb-[max(4px,env(safe-area-inset-bottom))]">
+    <footer className="relative z-30 w-full shrink-0 bg-[#171717] border-t border-neutral-800/90 pt-[11px] pb-[max(11px,env(safe-area-inset-bottom))] lg:pt-2 lg:pb-[max(4px,env(safe-area-inset-bottom))]">
       {/* 모바일: 하단바 상단에 흰색 진행선만 표시 */}
       <SeekBar key={`mobile:${seekKey}`} {...seekProps} mobile />
-      <div className="w-full grid grid-cols-1 lg:grid-cols-[18rem_minmax(0,1fr)_18rem] items-center gap-y-2 lg:min-h-[63px]">
+      <div className="w-full grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[18rem_minmax(0,1fr)_18rem] items-center gap-x-2 gap-y-2 px-3 lg:px-0 lg:gap-x-0 lg:min-h-[63px]">
         {/* 좌측: 큰 화면에서도 항상 좌측 사이드바(w-72) 바로 아래에 고정 */}
-        <div className="flex items-center gap-3 min-w-0 w-full px-5">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center">
+        <div className="flex items-center gap-3 min-w-0 w-full lg:px-5">
+          <div className="w-[46px] h-[46px] lg:w-12 lg:h-12 rounded-lg overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 flex items-center justify-center">
             {cur ? (
               <FallbackImg
                 key={cur.trackId}
@@ -77,16 +77,16 @@ export function PlayerBar({
           </div>
         </div>
 
-        {/* 중앙: 재생 컨트롤 버튼 + 시간 표기 및 구간 이동 재생바 */}
-        <div className="flex flex-col items-center gap-1 w-full min-w-0 max-w-[560px] justify-self-center px-3 lg:px-0">
-          <div className="flex items-center gap-[12px] sm:gap-[19px] lg:gap-3">
+        {/* 모바일: 곡 정보 오른쪽에 버튼을 한 줄로 배치 / PC: 기존 중앙 배치 유지 */}
+        <div className="flex flex-col items-center gap-1 w-auto lg:w-full min-w-0 max-w-[560px] justify-self-end lg:justify-self-center">
+          <div className="flex items-center flex-nowrap gap-[clamp(3px,2.5vw,10px)] lg:gap-3">
             <button
               type="button"
               onClick={onToggleShuffle}
               aria-label="랜덤 재생"
               aria-pressed={isShuffle}
               title={isShuffle ? '랜덤 재생 켜짐' : '랜덤 재생 꺼짐'}
-              className={`relative w-[34px] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center hover:text-white transition-colors ${
+              className={`relative shrink-0 w-[clamp(26px,8.15vw,34px)] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center hover:text-white transition-colors ${
                 isShuffle ? 'text-[#1DB954]' : 'text-[#a7a7a7]'
               }`}
             >
@@ -101,7 +101,7 @@ export function PlayerBar({
               type="button"
               onClick={onPrev}
               aria-label="이전 곡"
-              className="w-[34px] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
+              className="shrink-0 w-[clamp(26px,8.15vw,34px)] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
             >
               <svg className="w-[18px] h-[18px] lg:w-[16px] lg:h-[16px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -111,7 +111,7 @@ export function PlayerBar({
               type="button"
               onClick={onPlayPause}
               aria-label={isPlaying ? "일시정지" : "재생"}
-              className="w-[45px] h-[45px] lg:w-9 lg:h-9 rounded-full bg-white hover:scale-105 active:scale-95 text-[#121212] flex items-center justify-center transition-transform"
+              className="shrink-0 w-10 h-10 lg:w-9 lg:h-9 rounded-full bg-white hover:scale-105 active:scale-95 text-[#121212] flex items-center justify-center transition-transform"
             >
               {isPlaying ? (
                 <svg className="w-[18px] h-[18px] lg:w-[16px] lg:h-[16px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -127,7 +127,7 @@ export function PlayerBar({
               type="button"
               onClick={onNext}
               aria-label="다음 곡"
-              className="w-[34px] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
+              className="shrink-0 w-[clamp(26px,8.15vw,34px)] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center text-[#b3b3b3] hover:text-white transition-colors"
             >
               <svg className="w-[18px] h-[18px] lg:w-[16px] lg:h-[16px]" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
@@ -138,7 +138,7 @@ export function PlayerBar({
               onClick={onCycleRepeat}
               aria-label="반복 재생"
               title={repeatTitle}
-              className={`relative w-[34px] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center hover:text-white transition-colors ${
+              className={`relative shrink-0 w-[clamp(26px,8.15vw,34px)] h-[34px] lg:w-8 lg:h-8 flex items-center justify-center hover:text-white transition-colors ${
                 isRepeatActive ? 'text-[#1DB954]' : 'text-[#a7a7a7]'
               }`}
             >
@@ -200,7 +200,7 @@ function SeekBar({ enabled, currentTime, duration, onSeek, mobile = false }: {
   return (
     <div className={mobile ? 'absolute inset-x-0 top-0 z-10 lg:hidden' : 'hidden lg:flex w-full items-center gap-[10px]'}>
       {!mobile && <span className="min-w-[30px] text-right shrink-0 text-[12px] leading-4 font-normal tabular-nums text-[#a7a7a7]">{formatTime(time)}</span>}
-      <div className={mobile ? 'relative w-full h-3 has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-white/70' : 'relative flex-1 min-w-0 h-4 flex items-center rounded-sm has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-white/70'}>
+      <div className={mobile ? 'relative w-full h-[10px] has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-white/70' : 'relative flex-1 min-w-0 h-4 flex items-center rounded-sm has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-white/70'}>
         <div aria-hidden="true" className={mobile ? 'pointer-events-none absolute inset-x-0 top-0 h-[2px] overflow-hidden' : 'pointer-events-none absolute inset-x-0 h-[4px] rounded-full bg-[#3d3d3d] overflow-hidden'}>
           <div className={mobile ? 'h-full bg-white' : 'h-full rounded-full bg-white'} style={{ width: `${progress}%` }} />
         </div>
