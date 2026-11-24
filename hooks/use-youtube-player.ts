@@ -17,6 +17,7 @@ type Handlers = {
   onPaused: () => void
   onEnded: () => void
   onError: (code: number | undefined) => void
+  onProgress?: (currentTime: number, duration: number) => void
 }
 
 export function useYouTubePlayer(handlers: Handlers) {
@@ -29,6 +30,20 @@ export function useYouTubePlayer(handlers: Handlers) {
   useEffect(() => {
     handlersRef.current = handlers
   })
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const player = playerRef.current
+      if (!player || typeof player.getCurrentTime !== 'function' || typeof player.getDuration !== 'function') return
+      const cur = Number(player.getCurrentTime()) || 0
+      const dur = Number(player.getDuration()) || 0
+      if (dur > 0) {
+        handlersRef.current.onProgress?.(cur, dur)
+      }
+    }, 250)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const load = useCallback((videoId: string) => {
     const YT = window.YT
@@ -45,7 +60,6 @@ export function useYouTubePlayer(handlers: Handlers) {
         modestbranding: 1,
         enablejsapi: 1,
       }
-      // 실제 http/https 도메인 배포 환경에서는 origin을 전달해 유튜브 임베드 차단 최소화
       if (/^https?:$/.test(window.location.protocol) && window.location.origin && window.location.origin !== 'null') {
         playerVars.origin = window.location.origin
       }
@@ -62,9 +76,16 @@ export function useYouTubePlayer(handlers: Handlers) {
             e.target.playVideo()
           },
           onStateChange: (e: any) => {
-            if (e.data === YT.PlayerState.PLAYING) handlersRef.current.onPlaying()
-            else if (e.data === YT.PlayerState.PAUSED) handlersRef.current.onPaused()
-            else if (e.data === YT.PlayerState.ENDED) handlersRef.current.onEnded()
+            if (e.data === YT.PlayerState.PLAYING) {
+              handlersRef.current.onPlaying()
+              const dur = Number(e.target.getDuration?.()) || 0
+              const cur = Number(e.target.getCurrentTime?.()) || 0
+              if (dur > 0) handlersRef.current.onProgress?.(cur, dur)
+            } else if (e.data === YT.PlayerState.PAUSED) {
+              handlersRef.current.onPaused()
+            } else if (e.data === YT.PlayerState.ENDED) {
+              handlersRef.current.onEnded()
+            }
           },
           onError: (e: any) => {
             handlersRef.current.onError(e?.data)
@@ -104,7 +125,6 @@ export function useYouTubePlayer(handlers: Handlers) {
     }
   }, [load])
 
-  /** 재생 중이면 일시정지, 아니면 재생. 플레이어가 준비되지 않았으면 false 반환 */
   const toggle = useCallback(() => {
     const player = playerRef.current
     if (!player || typeof player.getPlayerState !== 'function') return false
@@ -113,10 +133,19 @@ export function useYouTubePlayer(handlers: Handlers) {
     return true
   }, [])
 
+  const seekTo = useCallback((seconds: number) => {
+    const player = playerRef.current
+    if (player && typeof player.seekTo === 'function') {
+      player.seekTo(seconds, true)
+      return true
+    }
+    return false
+  }, [])
+
   const restart = useCallback(() => {
     const player = playerRef.current
     if (player && typeof player.seekTo === 'function') {
-      player.seekTo(0)
+      player.seekTo(0, true)
       player.playVideo()
       return true
     }
@@ -128,5 +157,5 @@ export function useYouTubePlayer(handlers: Handlers) {
     if (player && typeof player.stopVideo === 'function') player.stopVideo()
   }, [])
 
-  return { hostRef, load, toggle, restart, stop }
+  return { hostRef, load, toggle, seekTo, restart, stop }
 }
