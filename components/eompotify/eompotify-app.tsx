@@ -341,7 +341,8 @@ export function EompotifyApp() {
         : [...snap.playlists, ...JSON.parse(JSON.stringify(DEFAULT_PLAYLISTS))]
       const initial = applySnapshot({ ...snap, playlists: source })
       commitActivePlaylistId(firstNormalPlaylistId(initial))
-      if (initial.length !== snap.playlists.length) {
+      // Restore the persisted position if an earlier version moved Liked songs.
+      if (initial.length !== snap.playlists.length || initial.some((p, i) => p.id !== snap.playlists[i]?.id)) {
         enqueueWrite(() => syncPlaylists(snap.playlists, initial))
       }
       setLoaded(true)
@@ -402,31 +403,44 @@ export function EompotifyApp() {
   }, [])
 
   /* ---------- 데이터 조작 ---------- */
-  const likedPlaylist = playlists[0]
+  const likedPlaylist = playlists.find((p) => p.id === LIKED_PLAYLIST_ID)
   const isCurrentLiked =
     !!currentTrack && !!likedPlaylist && likedPlaylist.tracks.some((t) => t.videoId === currentTrack.videoId)
 
   function toggleLikeCurrentTrack() {
     const cur = currentTrackRef.current
     if (!cur) return
-    const liked = ensureLikedPlaylist(playlistsRef.current)[0]
+    const liked = ensureLikedPlaylist(playlistsRef.current).find((p) => p.id === LIKED_PLAYLIST_ID)!
     const exists = liked.tracks.some((t) => t.videoId === cur.videoId)
     commitPlaylists((prev) => {
       const list = ensureLikedPlaylist(prev)
-      const likedPl = list[0]
+      const likedPl = list.find((p) => p.id === LIKED_PLAYLIST_ID)!
       const tracks = exists
         ? likedPl.tracks.filter((t) => t.videoId !== cur.videoId)
         : [
             ...likedPl.tracks,
             { id: createId('tr'), videoId: cur.videoId, title: cur.title, artist: cur.artist, albumArt: cur.albumArt || '' },
           ]
-      return [{ ...likedPl, tracks }, ...list.slice(1)]
+      return list.map((p) => (p.id === LIKED_PLAYLIST_ID ? { ...p, tracks } : p))
     })
     showToast(exists ? 'Liked songs에서 제거되었습니다.' : 'Liked songs에 추가되었습니다.')
   }
 
   function updateTracks(playlistId: string, fn: (tracks: Playlist['tracks']) => Playlist['tracks']) {
     commitPlaylists((prev) => prev.map((p) => (p.id === playlistId ? { ...p, tracks: fn(p.tracks) } : p)))
+  }
+
+  function reorderPlaylists(fromId: string, toId: string) {
+    if (!fromId || !toId || fromId === toId || fromId === LIKED_PLAYLIST_ID || toId === LIKED_PLAYLIST_ID) return
+    commitPlaylists((prev) => {
+      const fromIdx = prev.findIndex((p) => p.id === fromId)
+      const toIdx = prev.findIndex((p) => p.id === toId)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    })
   }
 
   function reorderTracks(playlistId: string, fromId: string, toId: string) {
@@ -585,6 +599,7 @@ export function EompotifyApp() {
               setOpenTrackMenuId(null)
               setSidebarOpen(false)
             }}
+            onReorder={reorderPlaylists}
             onNewPlaylist={() => setModal({ type: 'newPlaylist' })}
             onEditPlaylist={(id) => setModal({ type: 'editPlaylist', playlistId: id })}
             onDeletePlaylist={(id) => {
