@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import { CloseIcon } from './icons'
 
 export const inputClass =
@@ -18,14 +19,27 @@ export function ModalShell({
   labelledBy: string
   children: React.ReactNode
 }) {
+  const backdropPress = useRef(false)
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
+      onPointerDownCapture={(e) => {
+        backdropPress.current = e.isPrimary && e.button === 0 && e.target === e.currentTarget
+      }}
+      onPointerUpCapture={(e) => {
+        if (!e.isPrimary || e.target !== e.currentTarget) backdropPress.current = false
+      }}
+      onPointerCancelCapture={() => {
+        backdropPress.current = false
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        const shouldClose = backdropPress.current && e.target === e.currentTarget
+        backdropPress.current = false
+        if (shouldClose) onClose()
       }}
     >
       <div
