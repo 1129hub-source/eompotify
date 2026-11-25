@@ -5,7 +5,8 @@ import { fetchYouTubeOEmbed, findArtworkCandidates } from '@/lib/eompotify/artwo
 import type { ArtworkCandidate, NewTrackInput } from '@/lib/eompotify/types'
 import { extractYouTubeId, parseYouTubeTitle } from '@/lib/eompotify/utils'
 import type { ToastType } from './toaster'
-import { MusicNoteIcon } from './icons'
+import { MusicNoteIcon, SearchIcon } from './icons'
+import { ArtworkUploadButton, isCustomArtwork, prepareArtworkFile, persistTrackArtwork } from './artwork-upload'
 import { ArtworkGrid, inputClass, ModalHeader, ModalShell } from './modal-shell'
 
 type Props = {
@@ -29,6 +30,10 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
   const lastFetchedVideoIdRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const selectedArtRef = useRef('')
+  const [processing, setProcessing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const processingRef = useRef(false)
+  const savingRef = useRef(false)
 
   const updateBusy = (value: 'metadata' | 'artwork' | null) => {
     busyRef.current = value
@@ -53,7 +58,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
     setCandidates(found)
     if (found.length > 0) {
       const current = found.find((item) => item.albumArt === selectedArtRef.current)
-      selectArt((current || found[0]).albumArt)
+      if (!isCustomArtwork(selectedArtRef.current)) selectArt((current || found[0]).albumArt)
       setStatus(`공식 앨범아트 ${found.length}개를 찾았습니다. 아래에서 선택할 수 있습니다.`)
     } else {
       setStatus('일치하는 공식 앨범아트를 찾지 못했습니다. 제목·아티스트를 확인하고 다시 검색해 주세요.')
@@ -160,7 +165,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
     clearTimeout(timerRef.current)
     const id = ++requestRef.current
     if (!immediate) {
-      selectArt('')
+      if (!isCustomArtwork(selectedArtRef.current)) selectArt('')
       setCandidates([])
     }
     if (!t.trim() && !a.trim()) {
@@ -176,9 +181,34 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
     else timerRef.current = setTimeout(() => void researchArtwork(t, a, id), 650)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImageFile = async (file: File) => {
+    if (processingRef.current || savingRef.current || busyRef.current === 'metadata') return
+    clearTimeout(timerRef.current)
+    const id = ++requestRef.current
+    updateBusy(null)
+    processingRef.current = true
+    setProcessing(true)
+    try {
+      const art = await prepareArtworkFile(file)
+      if (id !== requestRef.current) return
+      selectArt(art)
+      setStatus('직접 선택한 이미지가 적용되었습니다.')
+    } catch (err) {
+      if (id === requestRef.current) {
+        setStatus('이미지를 적용하지 못했습니다. 기존 앨범아트를 유지합니다.')
+        showToast(err instanceof Error ? err.message : '이미지를 처리하지 못했습니다.', 'error')
+      }
+    } finally {
+      if (id === requestRef.current) {
+        processingRef.current = false
+        setProcessing(false)
+      }
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (busyRef.current) return
+    if (busyRef.current || processingRef.current || savingRef.current) return
     const videoId = extractYouTubeId(url)
     if (!videoId) {
       showToast('유효한 유튜브 링크를 입력해 주세요.', 'error')
@@ -189,12 +219,22 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
       showToast('노래 제목을 입력하거나 불러오기를 눌러 주세요.', 'error')
       return
     }
-    onSubmit({
-      videoId,
-      title: title.trim() || '제목 없음',
-      artist: artist.trim() || 'Unknown Artist',
-      albumArt: selectedArtRef.current || '',
-    })
+    savingRef.current = true
+    setSaving(true)
+    const id = ++requestRef.current
+    try {
+      const chosen = selectedArtRef.current || ''
+      const albumArt = chosen.startsWith('data:image/') ? await persistTrackArtwork(chosen) : chosen
+      if (id !== requestRef.current) return
+      onSubmit({ videoId, title: title.trim() || '제목 없음', artist: artist.trim() || 'Unknown Artist', albumArt })
+    } catch {
+      if (id === requestRef.current) showToast('앨범아트를 저장하지 못했습니다. 다시 시도해 주세요.', 'error')
+    } finally {
+      if (id === requestRef.current) {
+        savingRef.current = false
+        setSaving(false)
+      }
+    }
   }
 
   return (
@@ -218,6 +258,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               type="text"
               placeholder="https://www.youtube.com/watch?v=..."
               required
+              disabled={processing || saving}
               value={url}
               onChange={(e) => changeUrl(e.target.value)}
               inputMode="url"
@@ -228,7 +269,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
             />
             <button
               type="button"
-              disabled={busy !== null}
+              disabled={busy !== null || processing || saving}
               onClick={loadNow}
               className="px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-[#1DB954] border border-neutral-700 shrink-0 transition-colors disabled:opacity-60"
             >
@@ -251,24 +292,25 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               <MusicNoteIcon className="w-6 h-6 text-neutral-600" />
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white truncate">{title.trim() || '노래 제목'}</p>
             <p className="text-xs text-neutral-400 truncate mt-0.5">{artist.trim() || '아티스트'}</p>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => scheduleResearch(title, artist, true)}
-              className="mt-2 text-[11px] font-semibold text-[#1DB954] hover:underline disabled:opacity-50"
-            >
-              앨범아트 다시 검색
-            </button>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+              <button type="button" disabled={busy !== null || processing || saving}
+                onClick={() => scheduleResearch(title, artist, true)}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[11px] whitespace-nowrap font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60">
+                <SearchIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>{busy === 'artwork' ? '검색 중...' : '앨범아트 다시 검색'}</span>
+              </button>
+              <ArtworkUploadButton disabled={busy === 'metadata' || saving} processing={processing} onFile={handleImageFile} />
+            </div>
           </div>
         </div>
 
         {candidates.length > 0 && (
           <div className="space-y-2">
             <span className="block text-xs font-medium text-neutral-300">공식 앨범아트 선택</span>
-            <ArtworkGrid candidates={candidates} selected={selectedArt} onSelect={selectArt} />
+            <ArtworkGrid candidates={candidates} selected={selectedArt} onSelect={(art) => { if (!processingRef.current && !savingRef.current) selectArt(art) }} />
           </div>
         )}
 
@@ -281,7 +323,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               id="add-title-input"
               type="text"
               value={title}
-              disabled={busy === 'metadata'}
+              disabled={busy === 'metadata' || processing || saving}
               onChange={(e) => {
                 setTitle(e.target.value)
                 scheduleResearch(e.target.value, artist)
@@ -297,7 +339,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
               id="add-artist-input"
               type="text"
               value={artist}
-              disabled={busy === 'metadata'}
+              disabled={busy === 'metadata' || processing || saving}
               onChange={(e) => {
                 setArtist(e.target.value)
                 scheduleResearch(title, e.target.value)
@@ -317,10 +359,10 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
           </button>
           <button
             type="submit"
-            disabled={busy !== null}
+            disabled={busy !== null || processing || saving}
             className="disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#1DB954] hover:bg-[#1ed760] text-neutral-950 transition-colors"
           >
-            {busy ? '검색 중...' : '추가하기'}
+            {saving ? '저장 중...' : processing ? '이미지 처리 중...' : busy ? '검색 중...' : '추가하기'}
           </button>
         </div>
       </form>

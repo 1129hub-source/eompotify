@@ -22,6 +22,7 @@ import {
 import type { CurrentTrack, NewTrackInput, Playlist, RepeatMode } from '@/lib/eompotify/types'
 import { createId, cropImageFileToSquare, getFallbackCover } from '@/lib/eompotify/utils'
 import { AddTrackModal } from './add-track-modal'
+import { isCustomArtwork } from './artwork-upload'
 import { EditPlaylistModal } from './edit-playlist-modal'
 import { EditTrackModal } from './edit-track-modal'
 import { FallbackImg } from './fallback-img'
@@ -351,7 +352,7 @@ export function EompotifyApp() {
       for (const pl of initial) {
         for (const track of pl.tracks) {
           const needsLookup = !track.albumArt || track.albumArt.includes('i.ytimg.com') || track.needsArtworkLookup
-          if (!needsLookup) continue
+          if (!needsLookup || isCustomArtwork(track.albumArt || '')) continue
           try {
             const results = await findArtworkCandidates(track.title, track.artist, 5)
             if (results.length > 0 && results[0].albumArt) {
@@ -490,7 +491,7 @@ export function EompotifyApp() {
   }
 
   function saveEditedTrack(playlistId: string, trackId: string, values: { title: string; artist: string; albumArt: string }) {
-    updateTracks(playlistId, (tracks) => tracks.map((t) => (t.id === trackId ? { ...t, ...values } : t)))
+    updateTracks(playlistId, (tracks) => tracks.map((t) => (t.id === trackId ? { ...t, ...values, needsArtworkLookup: values.albumArt ? false : t.needsArtworkLookup } : t)))
     const cur = currentTrackRef.current
     if (cur && cur.playlistId === playlistId && cur.trackId === trackId) commitCurrentTrack({ ...cur, ...values })
     setModal(null)
