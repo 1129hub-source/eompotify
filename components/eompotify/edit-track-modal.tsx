@@ -141,12 +141,12 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
           <img
             src={preview}
             alt="앨범아트"
-            className="sm:row-span-2 w-16 h-16 aspect-square rounded-lg object-cover bg-neutral-900 border border-neutral-800 shrink-0"
+            className="row-span-2 w-16 h-16 aspect-square rounded-lg object-cover bg-neutral-900 border border-neutral-800 shrink-0"
           />
           <div className="min-w-0">
             <p className="text-xs text-neutral-400">현재 선택된 앨범아트</p>
           </div>
-          <div className="col-span-2 sm:col-span-1 sm:col-start-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <div className="col-start-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <button type="button" disabled={searching || processing || saving} onClick={handleSearch}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[11px] whitespace-nowrap font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60">
                 <SearchIcon className="w-3.5 h-3.5 shrink-0" />
