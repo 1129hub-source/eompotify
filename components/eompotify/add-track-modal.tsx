@@ -295,7 +295,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white truncate">{title.trim() || '노래 제목'}</p>
             <p className="text-xs text-neutral-400 truncate mt-0.5">{artist.trim() || '아티스트'}</p>
-<div className="mt-2 flex flex-wrap items-center max-sm:justify-center gap-x-2 gap-y-1.5">
+<div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <button type="button" disabled={busy !== null || processing || saving}
                 onClick={() => scheduleResearch(title, artist, true)}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[11px] whitespace-nowrap font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60">
