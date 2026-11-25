@@ -106,7 +106,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
     } catch (err) {
       if (id !== requestRef.current) return
       console.warn('앨범아트 검색 실패:', err)
-      setStatus('앨범아트 검색 서비스에 연결하지 못했습니다. 앨범아트 다시 검색을 눌러 주세요.')
+      setStatus('앨범아트 검색 서비스에 연결하지 못했습니다. 앨범아트 검색을 재시도해 주세요.')
     } finally {
       if (id === requestRef.current) updateBusy(null)
     }
@@ -300,7 +300,7 @@ export function AddTrackModal({ onClose, onSubmit, showToast }: Props) {
                 onClick={() => scheduleResearch(title, artist, true)}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[11px] whitespace-nowrap font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60">
                 <SearchIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>{busy === 'artwork' ? '검색 중...' : '앨범아트 다시 검색'}</span>
+                <span>{busy === 'artwork' ? '검색 중...' : '앨범아트 검색'}</span>
               </button>
               <ArtworkUploadButton disabled={busy === 'metadata' || saving} processing={processing} onFile={handleImageFile} />
             </div>
