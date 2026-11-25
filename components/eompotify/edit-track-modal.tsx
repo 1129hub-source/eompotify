@@ -150,7 +150,7 @@ export function EditTrackModal({ track, onClose, onSubmit, showToast }: Props) {
               <button type="button" disabled={searching || processing || saving} onClick={handleSearch}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[11px] whitespace-nowrap font-semibold text-[#1DB954] border border-neutral-700 transition-colors disabled:opacity-60">
                 <SearchIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>{searching ? '검색 중...' : '앨범아트 다시 검색'}</span>
+                <span>{searching ? '검색 중...' : '앨범아트 검색'}</span>
               </button>
               <ArtworkUploadButton disabled={saving} processing={processing} onFile={handleImageFile} />
           </div>
