@@ -461,9 +461,23 @@ export function EompotifyApp() {
     const pl = playlistsRef.current.find((p) => p.id === playlistId)
     const removed = pl?.tracks.find((t) => t.id === trackId)
     if (!pl || !removed) return
-    updateTracks(playlistId, (tracks) => tracks.filter((t) => t.id !== trackId))
+    // A liked track is a separate row sharing the same YouTube video ID.
+    const deleteEverywhere =
+      playlistId === LIKED_PLAYLIST_ID ||
+      playlistsRef.current.some((p) => p.id === LIKED_PLAYLIST_ID && p.tracks.some((t) => t.videoId === removed.videoId))
+
+    commitPlaylists((prev) =>
+      prev.map((p) => {
+        if (!deleteEverywhere && p.id !== playlistId) return p
+        const tracks = p.tracks.filter((t) =>
+          deleteEverywhere ? t.videoId !== removed.videoId : t.id !== trackId,
+        )
+        return tracks.length === p.tracks.length ? p : { ...p, tracks }
+      }),
+    )
+
     const cur = currentTrackRef.current
-    if (cur && cur.playlistId === playlistId && cur.trackId === trackId) {
+    if (cur && (deleteEverywhere ? cur.videoId === removed.videoId : cur.playlistId === playlistId && cur.trackId === trackId)) {
       commitCurrentTrack(null)
       setIsPlaying(false)
       setCurrentTime(0)
